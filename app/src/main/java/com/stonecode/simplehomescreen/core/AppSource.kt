@@ -53,8 +53,31 @@ class LauncherAppSource(
                 callback(PackageEvent.Added(packageName, user))
             }
 
+            override fun onPackageChanged(
+                packageName: String?,
+                user: UserHandle?
+            ) {
+                TODO("Not yet implemented")
+            }
+
             override fun onPackageRemoved(packageName: String, user: UserHandle) {
                 callback(PackageEvent.Removed(packageName, user))
+            }
+
+            override fun onPackagesAvailable(
+                packageNames: Array<out String?>?,
+                user: UserHandle?,
+                replacing: Boolean
+            ) {
+                TODO("Not yet implemented")
+            }
+
+            override fun onPackagesUnavailable(
+                packageNames: Array<out String?>?,
+                user: UserHandle?,
+                replacing: Boolean
+            ) {
+                TODO("Not yet implemented")
             }
         }
         launcherApps.registerCallback(cb, mainHandler)
