@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Simple Home</string>
+    <string name="home_add_widget">Add widget</string>
+    <string name="usage_access_prompt_title">Grant usage access</string>
+    <string name="usage_access_prompt_message">Allow Simple Home to learn which apps you open most often.</string>
+    <string name="usage_access_open_settings">Open settings</string>
+</resources>
