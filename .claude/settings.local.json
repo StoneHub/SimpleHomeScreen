@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(claude doctor)"
+      "Bash(claude doctor)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

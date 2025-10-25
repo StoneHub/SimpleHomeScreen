@@ -1,7 +1,18 @@
 <resources>
     <string name="app_name">Simple Home</string>
+    <string name="settings_name">Simple Home Settings</string>
     <string name="home_add_widget">Add widget</string>
     <string name="usage_access_prompt_title">Grant usage access</string>
     <string name="usage_access_prompt_message">Allow Simple Home to learn which apps you open most often.</string>
     <string name="usage_access_open_settings">Open settings</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_launcher_section">Launcher</string>
+    <string name="settings_set_default_launcher">Set as default launcher</string>
+    <string name="settings_set_default_launcher_desc">Make Simple Home your default home screen</string>
+    <string name="settings_about_section">About</string>
+    <string name="settings_app_info">App info</string>
+    <string name="settings_app_info_desc">View permissions, storage, and other app details</string>
+    <string name="settings_version">Version</string>
 </resources>
