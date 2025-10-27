@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.stonecode.simplehomescreen.core.IconCache
 import com.stonecode.simplehomescreen.core.LauncherAppSource
 import com.stonecode.simplehomescreen.core.PackageEvent
+import com.stonecode.simplehomescreen.core.SearchEngine
 import com.stonecode.simplehomescreen.core.UsageRanker
 import com.stonecode.simplehomescreen.storage.WorkspaceSnapshot
 import com.stonecode.simplehomescreen.storage.WorkspaceStore
@@ -26,7 +27,10 @@ data class HomeState(
     val apps: List<AppTile> = emptyList(),
     val widgets: List<WidgetTileState> = emptyList(),
     val columns: Int = DEFAULT_COLUMNS,
-    val showUsageAccessPrompt: Boolean = false
+    val showUsageAccessPrompt: Boolean = false,
+    val drawerOpen: Boolean = false,
+    val searchQuery: String = "",
+    val searchResults: List<AppTile> = emptyList()
 ) {
     companion object {
         const val DEFAULT_COLUMNS = 5
@@ -43,6 +47,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val appSource = LauncherAppSource(application, launcherApps)
     private val usageRanker = UsageRanker(application)
     private val workspaceStore = WorkspaceStore(application)
+    private val searchEngine = SearchEngine()
     private val initialWorkspace = workspaceStore.load()
 
     private val _state = MutableStateFlow(
@@ -102,10 +107,40 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         updated?.let { workspaceStore.save(WorkspaceSnapshot(widgets = it.widgets)) }
     }
 
+    fun onDrawerToggle(open: Boolean) {
+        _state.update { current ->
+            current.copy(
+                drawerOpen = open,
+                searchQuery = if (!open) "" else current.searchQuery
+            )
+        }
+    }
+
+    fun onSearchQueryChange(query: String) {
+        _state.update { current ->
+            val results = if (query.isBlank()) {
+                emptyList()
+            } else {
+                val searchResults = searchEngine.search(query, current.apps)
+                android.util.Log.d("HomeViewModel", "Search '$query' found ${searchResults.size} results from ${current.apps.size} total apps")
+                searchResults.take(5).forEach { app ->
+                    android.util.Log.d("HomeViewModel", "  - ${app.label}")
+                }
+                searchResults
+            }
+            current.copy(
+                searchQuery = query,
+                searchResults = results
+            )
+        }
+    }
+
     private fun enqueueRefresh() {
         if (refreshJob?.isActive == true) return
         refreshJob = viewModelScope.launch {
             val launchables = runCatching { appSource.loadLaunchables() }.getOrElse { emptyList() }
+            android.util.Log.d("HomeViewModel", "Loaded ${launchables.size} launchable apps")
+
             val hasUsageAccess = usageRanker.hasAccess()
             val ranks = if (hasUsageAccess) usageRanker.ranks() else emptyMap()
             val tiles = launchables
@@ -113,7 +148,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 .mapNotNull { launchable ->
                     val icon = runCatching {
                         iconCache.get(launchable.component, launchable.userHandle)
-                    }.getOrElse { return@mapNotNull null }
+                    }.getOrElse { error ->
+                        android.util.Log.w("HomeViewModel", "Failed to load icon for ${launchable.label}: ${error.message}")
+                        return@mapNotNull null
+                    }
                     AppTile(
                         key = launchable.component.flattenToShortString(),
                         label = launchable.label,
@@ -130,6 +168,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     )
                 }
+            android.util.Log.d("HomeViewModel", "Successfully loaded icons for ${tiles.size} apps")
+
             _state.update { current ->
                 current.copy(
                     apps = tiles,

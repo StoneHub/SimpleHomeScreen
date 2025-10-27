@@ -7,7 +7,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -109,15 +112,60 @@ fun HomeScreen(
         pickLauncher.launch(pickIntent)
     }
 
-    Scaffold(
-        modifier = modifier.background(MaterialTheme.colorScheme.background),
-        floatingActionButton = {
-            FloatingActionButton(onClick = { startWidgetPicker() }) {
-                Text(text = stringResource(id = R.string.home_add_widget))
+    var startY by remember { mutableStateOf(0f) }
+    var currentY by remember { mutableStateOf(0f) }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectVerticalDragGestures(
+                    onDragStart = { offset ->
+                        startY = offset.y
+                        currentY = offset.y
+                    },
+                    onDragEnd = {
+                        val dragDistance = startY - currentY
+                        val startedInBottomThird = startY > size.height * 0.66f
+                        // Swipe up at least 100px from bottom third
+                        if (dragDistance > 100f && startedInBottomThird) {
+                            viewModel.onDrawerToggle(true)
+                        }
+                        startY = 0f
+                        currentY = 0f
+                    },
+                    onDragCancel = {
+                        startY = 0f
+                        currentY = 0f
+                    },
+                    onVerticalDrag = { change, _ ->
+                        currentY = change.position.y
+                    }
+                )
             }
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { padding ->
+    ) {
+        Scaffold(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            floatingActionButton = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // App Drawer FAB (temporary for testing)
+                    FloatingActionButton(
+                        onClick = { viewModel.onDrawerToggle(true) }
+                    ) {
+                        Text("📱")
+                    }
+                    // Widget FAB
+                    FloatingActionButton(onClick = { startWidgetPicker() }) {
+                        Text(text = stringResource(id = R.string.home_add_widget))
+                    }
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { padding ->
         LazyVerticalGrid(
             columns = GridCells.Fixed(state.columns.coerceAtLeast(1)),
             modifier = Modifier
@@ -158,6 +206,17 @@ fun HomeScreen(
                 AppCell(app = app)
             }
         }
+        }
+
+        // App Drawer
+        AppDrawer(
+            visible = state.drawerOpen,
+            apps = state.apps,
+            searchQuery = state.searchQuery,
+            searchResults = state.searchResults,
+            onDismiss = { viewModel.onDrawerToggle(false) },
+            onSearchQueryChange = { query -> viewModel.onSearchQueryChange(query) }
+        )
     }
 }
 

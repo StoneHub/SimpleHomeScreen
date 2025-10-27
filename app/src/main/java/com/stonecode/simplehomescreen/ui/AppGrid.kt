@@ -19,8 +19,10 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @Immutable
@@ -50,6 +52,18 @@ fun AppGrid(
     }
 }
 
+@Preview
+@Composable
+fun AppGridPreview() {
+    val apps = listOf(
+        AppTile("1", "App 1", ImageBitmap(1, 1), {}),
+        AppTile("2", "App 2", ImageBitmap(1, 1), {}),
+        AppTile("3", "App 3", ImageBitmap(1, 1), {}),
+        AppTile("4", "App 4", ImageBitmap(1, 1), {}),
+    )
+    AppGrid(apps = apps, columns = 4)
+}
+
 @Composable
 internal fun AppCell(app: AppTile) {
     Column(
@@ -73,4 +87,15 @@ internal fun AppCell(app: AppTile) {
             overflow = TextOverflow.Ellipsis
         )
     }
+}
+
+@Preview
+@Composable
+internal fun AppCellPreview() {
+    val app = AppTile(
+        key = "preview",
+        label = "Sample App",
+        icon = ImageBitmap(54, 54),
+        launch = {})
+    AppCell(app = app)
 }

@@ -44,13 +44,10 @@ class SettingsActivity : ComponentActivity() {
     private fun requestDefaultLauncher() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val roleManager = getSystemService(RoleManager::class.java)
-            if (roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
-                !roleManager.isRoleHeld(RoleManager.ROLE_HOME)
-            ) {
-                startActivityForResult(
-                    roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME),
-                    REQUEST_CODE_SET_DEFAULT_LAUNCHER
-                )
+            if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                // Always show the dialog, even if already set as default
+                val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+                startActivity(intent)
             }
         } else {
             // For older Android versions, open home settings

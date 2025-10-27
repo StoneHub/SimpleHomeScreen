@@ -15,4 +15,12 @@
     <string name="settings_app_info">App info</string>
     <string name="settings_app_info_desc">View permissions, storage, and other app details</string>
     <string name="settings_version">Version</string>
+
+    <!-- App Drawer & Search -->
+    <string name="search_apps">Search apps</string>
+    <string name="search_hint">Search for an app…</string>
+    <string name="search_no_results">No apps found</string>
+    <string name="search_results_count">%d apps</string>
+    <string name="drawer_all_apps">All Apps</string>
+    <string name="drawer_swipe_up_hint">Swipe up to open app drawer</string>
 </resources>

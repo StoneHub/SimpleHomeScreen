@@ -4,6 +4,7 @@ import android.app.role.RoleManager
 import android.appwidget.AppWidgetManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -28,6 +29,13 @@ class HomeActivity : ComponentActivity() {
             host = widgetHost
         )
         usageRanker = UsageRanker(this)
+
+        // Disable back gesture - home screen should not respond to back
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                // Do nothing - home screen is the bottom of the navigation stack
+            }
+        })
 
         enableEdgeToEdge()
         maybeRequestHomeRole()

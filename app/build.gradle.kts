@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.stonecode.simplehomescreen"
-        minSdk = 26
+        minSdk = 33
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.compose.ui.graphics)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 
