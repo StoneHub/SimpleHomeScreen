@@ -2,9 +2,12 @@ package com.stonecode.simplehomescreen.core
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.LauncherApps
+import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
 import android.os.UserHandle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,20 +34,32 @@ class LauncherAppSource(
     private val context: Context,
     private val launcherApps: LauncherApps
 ) : AppSource {
+    private val packageManager = context.packageManager
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var callback: LauncherApps.Callback? = null
 
     override suspend fun loadLaunchables(): List<Launchable> = withContext(Dispatchers.IO) {
-        launcherApps.profiles.flatMap { user ->
-            launcherApps.getActivityList(null, user).map {
-                Launchable(
-                    component = it.componentName,
-                    label = it.label?.toString() ?: it.componentName.className,
-                    userHandle = user
-                )
-            }
-        }.sortedBy { it.label.lowercase() }
+        val launchables = linkedMapOf<String, Launchable>()
+
+        launcherApps.profiles.forEach { user ->
+            runCatching { launcherApps.getActivityList(null, user) }
+                .getOrDefault(emptyList())
+                .forEach { activity ->
+                    val launchable = Launchable(
+                        component = activity.componentName,
+                        label = activity.label?.toString() ?: activity.componentName.className,
+                        userHandle = user
+                    )
+                    launchables.putIfAbsent(launchable.cacheKey(), launchable)
+                }
+        }
+
+        queryCurrentUserLaunchables().forEach { launchable ->
+            launchables.putIfAbsent(launchable.cacheKey(), launchable)
+        }
+
+        launchables.values.sortedBy { it.label.lowercase() }
     }
 
     override fun registerCallbacks(callback: (PackageEvent) -> Unit) {
@@ -99,4 +114,27 @@ class LauncherAppSource(
         callback?.let { launcherApps.unregisterCallback(it) }
         callback = null
     }
+
+    private fun queryCurrentUserLaunchables(): List<Launchable> {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val flags = PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
+
+        return packageManager.queryIntentActivities(intent, flags).mapNotNull { resolveInfo ->
+            val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
+            val component = ComponentName(activityInfo.packageName, activityInfo.name)
+            val label = resolveInfo.loadLabel(packageManager)?.toString()
+                ?.takeIf { it.isNotBlank() }
+                ?: activityInfo.loadLabel(packageManager)?.toString()
+                ?: component.className
+
+            Launchable(
+                component = component,
+                label = label,
+                userHandle = Process.myUserHandle()
+            )
+        }
+    }
+
+    private fun Launchable.cacheKey(): String =
+        "${component.flattenToShortString()}@${userHandle.hashCode()}"
 }

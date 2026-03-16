@@ -6,7 +6,20 @@
       "Bash(git ls-files:*)",
       "Bash(wc:*)",
       "Bash(./gradlew assembleDebug 2>&1 | tail -60)",
-      "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew assembleDebug 2>&1 | tail -80)"
+      "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew assembleDebug 2>&1 | tail -80)",
+      "Bash(adb devices:*)",
+      "Bash(where adb:*)",
+      "Read(//c/Users/monro/AppData/Local/Android/Sdk/platform-tools/**)",
+      "Read(//c/Program Files/Android/Android Studio/platform-tools/**)",
+      "Read(//c/Users/monro/AppData/Local/Android/**)",
+      "Bash(ADB=\"/c/Users/monro/AppData/Local/Android/Sdk/platform-tools/adb.exe\" && \"$ADB\" devices)",
+      "WebFetch(domain:mcp.tavily.com)",
+      "WebSearch",
+      "Bash(ADB=\"/c/Users/monro/AppData/Local/Android/Sdk/platform-tools/adb.exe\" && \"$ADB\" exec-out screencap -p > \"C:/Users/monro/Codex/SimpleHomeScreen/screenshot.png\" && ls -la \"C:/Users/monro/Codex/SimpleHomeScreen/screenshot.png\")",
+      "Bash(\"/c/Users/monro/AppData/Local/Android/Sdk/platform-tools/adb.exe\" devices:*)",
+      "WebFetch(domain:www.smartlauncher.net)",
+      "WebFetch(domain:www.androidauthority.com)",
+      "Bash(\"/c/Users/monro/AppData/Local/Android/Sdk/platform-tools/adb.exe\" exec-out:*)"
     ],
     "deny": [],
     "ask": []

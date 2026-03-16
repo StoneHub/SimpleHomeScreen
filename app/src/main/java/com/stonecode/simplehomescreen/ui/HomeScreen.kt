@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Widgets
@@ -49,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -128,11 +130,14 @@ fun HomeScreen(
 
     var startY by remember { mutableStateOf(0f) }
     var currentY by remember { mutableStateOf(0f) }
+    val density = LocalDensity.current
+    val drawerDragThresholdPx = with(density) { 56.dp.toPx() }
+    val notificationDragThresholdPx = with(density) { 72.dp.toPx() }
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
+            .pointerInput(drawerDragThresholdPx, notificationDragThresholdPx) {
                 detectVerticalDragGestures(
                     onDragStart = { offset ->
                         startY = offset.y
@@ -140,16 +145,17 @@ fun HomeScreen(
                     },
                     onDragEnd = {
                         val dragDistance = startY - currentY
-                        val startedInBottomThird = startY > size.height * 0.66f
+                        val startedInBottomHalf = startY > size.height * 0.5f
                         val startedInTopThird = startY < size.height * 0.33f
                         val dragDown = currentY - startY
 
-                        // Swipe up from bottom third → open drawer
-                        if (dragDistance > 100f && startedInBottomThird) {
+                        // Let the drawer open from a larger touch target so it is easier to access
+                        // on tall screens and folded devices.
+                        if (dragDistance > drawerDragThresholdPx && startedInBottomHalf) {
                             viewModel.onDrawerToggle(true)
                         }
                         // Swipe down from top third → expand notification shade
-                        if (dragDown > 100f && startedInTopThird) {
+                        if (dragDown > notificationDragThresholdPx && startedInTopThird) {
                             runCatching {
                                 @Suppress("WrongConstant")
                                 val service = context.getSystemService("statusbar")
@@ -178,6 +184,12 @@ fun HomeScreen(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    FloatingActionButton(onClick = { viewModel.onDrawerToggle(true) }) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = stringResource(R.string.drawer_all_apps)
+                        )
+                    }
                     // Settings FAB
                     FloatingActionButton(
                         onClick = {
@@ -340,7 +352,7 @@ private fun handlePickResult(
     pendingProviderHolder: androidx.compose.runtime.MutableState<ComponentName?>,
     widgetController: WidgetController,
     onWidgetReady: (Int) -> Unit,
-    onBindRequired: (Int, ComponentName?, android.os.Bundle?) -> Unit,
+    onBindRequired: (Int, ComponentName, android.os.Bundle?) -> Unit,
     onFailure: () -> Unit
 ) {
     val data = result.data
@@ -373,6 +385,13 @@ private fun handlePickResult(
         AppWidgetManager.EXTRA_APPWIDGET_PROVIDER,
         ComponentName::class.java
     ) ?: pendingProviderHolder.value
+
+    // Some picker/bind flows return without provider info; treat that as a failed add instead of
+    // launching a bind request that cannot succeed.
+    if (provider == null) {
+        onFailure()
+        return
+    }
 
     pendingProviderHolder.value = provider
     if (widgetController.bindIfAllowed(returnedId, provider)) {

@@ -172,10 +172,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val ranks = if (hasUsageAccess) usageRanker.ranks() else emptyMap()
             val tiles = launchables
                 .sortedByDescending { ranks[it.component.packageName] ?: 0.0 }
-                .mapNotNull { launchable ->
-                    val icon = runCatching {
-                        iconCache.get(launchable.component, launchable.userHandle)
-                    }.getOrNull() ?: return@mapNotNull null
+                .map { launchable ->
+                    val icon = iconCache.get(launchable.component, launchable.userHandle)
                     AppTile(
                         key = launchable.component.flattenToShortString(),
                         label = launchable.label,

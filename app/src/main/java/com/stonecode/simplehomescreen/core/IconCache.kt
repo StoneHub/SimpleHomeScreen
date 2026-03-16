@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.LauncherApps
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.os.UserHandle
 import androidx.collection.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
@@ -16,6 +17,7 @@ class IconCache(
     private val context: Context,
     maxEntries: Int = DEFAULT_MAX_ENTRIES
 ) {
+    private val packageManager = context.packageManager
 
     private val memory = object : LruCache<String, Bitmap>(maxEntries) {
         override fun sizeOf(key: String, value: Bitmap): Int = 1
@@ -26,16 +28,12 @@ class IconCache(
             val key = "${component.flattenToShortString()}@${user.hashCode()}"
             memory.get(key)?.let { return@withContext it.asImageBitmap() }
 
-            val launcherApps = context.getSystemService(LauncherApps::class.java)
-            val activities = launcherApps?.getActivityList(component.packageName, user).orEmpty()
-            val activityInfo = activities.firstOrNull { it.componentName == component }
-                ?: throw IllegalStateException("Component not found: $component")
-            val drawable = activityInfo.getBadgedIcon(0)
-            val sizePx = ICON_SIZE_PX
-            val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888).also { bmp ->
-                val canvas = Canvas(bmp)
-                drawable.setBounds(0, 0, sizePx, sizePx)
-                drawable.draw(canvas)
+            val bitmap = runCatching {
+                loadDrawable(component, user).renderBitmap()
+            }.recoverCatching {
+                packageManager.defaultActivityIcon.renderBitmap()
+            }.getOrElse {
+                Bitmap.createBitmap(ICON_SIZE_PX, ICON_SIZE_PX, Bitmap.Config.ARGB_8888)
             }
             memory.put(key, bitmap)
             bitmap.asImageBitmap()
@@ -43,6 +41,26 @@ class IconCache(
 
     fun clear() {
         memory.evictAll()
+    }
+
+    private fun loadDrawable(component: ComponentName, user: UserHandle): Drawable {
+        val launcherApps = context.getSystemService(LauncherApps::class.java)
+        val activities = launcherApps?.getActivityList(component.packageName, user).orEmpty()
+        val activityInfo = activities.firstOrNull { it.componentName == component }
+
+        return runCatching { activityInfo?.getBadgedIcon(0) }.getOrNull()
+            ?: runCatching { packageManager.getActivityIcon(component) }.getOrNull()
+            ?: runCatching { packageManager.getApplicationIcon(component.packageName) }.getOrNull()
+            ?: packageManager.defaultActivityIcon
+    }
+
+    private fun Drawable.renderBitmap(): Bitmap {
+        val sizePx = ICON_SIZE_PX
+        return Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888).also { bmp ->
+            val canvas = Canvas(bmp)
+            setBounds(0, 0, sizePx, sizePx)
+            draw(canvas)
+        }
     }
 
     private companion object {

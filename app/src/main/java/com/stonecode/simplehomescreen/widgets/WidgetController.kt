@@ -24,12 +24,11 @@ class WidgetController(
         return host.createView(context, id, info)
     }
 
-    fun bindIfAllowed(id: Int, provider: ComponentName?, options: Bundle? = null): Boolean {
-        if (provider == null) return false
+    fun bindIfAllowed(id: Int, provider: ComponentName, options: Bundle? = null): Boolean {
         return manager.bindAppWidgetIdIfAllowed(id, provider, options)
     }
 
-    fun requestBindIntent(id: Int, provider: ComponentName?, options: Bundle? = null) =
+    fun requestBindIntent(id: Int, provider: ComponentName, options: Bundle? = null) =
         Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
