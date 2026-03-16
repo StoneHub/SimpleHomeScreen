@@ -23,4 +23,28 @@
     <string name="search_results_count">%d apps</string>
     <string name="drawer_all_apps">All Apps</string>
     <string name="drawer_swipe_up_hint">Swipe up to open app drawer</string>
+
+    <!-- Widget -->
+    <string name="remove_widget">Remove widget</string>
+
+    <!-- Categories -->
+    <string name="category_favorites">Favorites</string>
+    <string name="category_games">Games</string>
+    <string name="category_professional">Professional &amp; Banking</string>
+    <string name="category_my_apps">My Apps</string>
+    <string name="category_utilities">Utilities &amp; Tools</string>
+    <string name="category_other">Other</string>
+
+    <!-- Settings -->
+    <string name="settings_appearance_section">Appearance</string>
+    <string name="settings_grid_columns">Grid columns</string>
+    <string name="settings_grid_columns_desc">Number of columns in the app grid</string>
+    <string name="settings_favorites_count">Favorites count</string>
+    <string name="settings_favorites_count_desc">Number of apps on the Favorites page</string>
+    <string name="settings_categories_section">Categories</string>
+    <string name="settings_category_visibility">Show/hide category pages</string>
+
+    <!-- Context menu -->
+    <string name="app_info">App info</string>
+    <string name="uninstall">Uninstall</string>
 </resources>

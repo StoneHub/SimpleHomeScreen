@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(claude doctor)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(git ls-files:*)",
+      "Bash(wc:*)",
+      "Bash(./gradlew assembleDebug 2>&1 | tail -60)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" ./gradlew assembleDebug 2>&1 | tail -80)"
     ],
     "deny": [],
     "ask": []

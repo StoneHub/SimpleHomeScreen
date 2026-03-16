@@ -24,6 +24,7 @@ data class Launchable(
 sealed interface PackageEvent {
     data class Added(val pkg: String, val user: UserHandle) : PackageEvent
     data class Removed(val pkg: String, val user: UserHandle) : PackageEvent
+    data class Changed(val pkg: String, val user: UserHandle) : PackageEvent
 }
 
 class LauncherAppSource(
@@ -57,7 +58,9 @@ class LauncherAppSource(
                 packageName: String?,
                 user: UserHandle?
             ) {
-                TODO("Not yet implemented")
+                if (packageName != null && user != null) {
+                    callback(PackageEvent.Changed(packageName, user))
+                }
             }
 
             override fun onPackageRemoved(packageName: String, user: UserHandle) {
@@ -69,7 +72,11 @@ class LauncherAppSource(
                 user: UserHandle?,
                 replacing: Boolean
             ) {
-                TODO("Not yet implemented")
+                if (user != null) {
+                    packageNames?.filterNotNull()?.forEach { pkg ->
+                        callback(PackageEvent.Added(pkg, user))
+                    }
+                }
             }
 
             override fun onPackagesUnavailable(
@@ -77,7 +84,11 @@ class LauncherAppSource(
                 user: UserHandle?,
                 replacing: Boolean
             ) {
-                TODO("Not yet implemented")
+                if (user != null) {
+                    packageNames?.filterNotNull()?.forEach { pkg ->
+                        callback(PackageEvent.Removed(pkg, user))
+                    }
+                }
             }
         }
         launcherApps.registerCallback(cb, mainHandler)

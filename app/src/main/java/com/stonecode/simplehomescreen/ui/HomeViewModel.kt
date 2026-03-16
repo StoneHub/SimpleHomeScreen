@@ -3,13 +3,17 @@ package com.stonecode.simplehomescreen.ui
 import android.app.Application
 import android.content.ComponentName
 import android.content.pm.LauncherApps
+import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.stonecode.simplehomescreen.core.AppCategorizer
+import com.stonecode.simplehomescreen.core.AppCategory
 import com.stonecode.simplehomescreen.core.IconCache
 import com.stonecode.simplehomescreen.core.LauncherAppSource
 import com.stonecode.simplehomescreen.core.PackageEvent
 import com.stonecode.simplehomescreen.core.SearchEngine
 import com.stonecode.simplehomescreen.core.UsageRanker
+import com.stonecode.simplehomescreen.storage.PreferencesStore
 import com.stonecode.simplehomescreen.storage.WorkspaceSnapshot
 import com.stonecode.simplehomescreen.storage.WorkspaceStore
 import kotlinx.coroutines.Job
@@ -23,19 +27,25 @@ data class WidgetTileState(
     val provider: ComponentName? = null
 )
 
+data class PageInfo(
+    val title: String,
+    val category: AppCategory? = null,
+    val isFavorites: Boolean = false
+)
+
 data class HomeState(
     val apps: List<AppTile> = emptyList(),
+    val categorizedApps: Map<AppCategory, List<AppTile>> = emptyMap(),
+    val favorites: List<AppTile> = emptyList(),
+    val activePages: List<PageInfo> = emptyList(),
+    val currentPage: Int = 0,
     val widgets: List<WidgetTileState> = emptyList(),
-    val columns: Int = DEFAULT_COLUMNS,
+    val columns: Int = PreferencesStore.DEFAULT_GRID_COLUMNS,
     val showUsageAccessPrompt: Boolean = false,
     val drawerOpen: Boolean = false,
     val searchQuery: String = "",
     val searchResults: List<AppTile> = emptyList()
-) {
-    companion object {
-        const val DEFAULT_COLUMNS = 5
-    }
-}
+)
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -44,15 +54,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         application.getSystemService(LauncherApps::class.java) ?: throw IllegalStateException(
             "LauncherApps unavailable"
         )
+    private val packageManager: PackageManager = application.packageManager
     private val appSource = LauncherAppSource(application, launcherApps)
     private val usageRanker = UsageRanker(application)
     private val workspaceStore = WorkspaceStore(application)
     private val searchEngine = SearchEngine()
+    private val appCategorizer = AppCategorizer()
+    val preferencesStore = PreferencesStore(application)
     private val initialWorkspace = workspaceStore.load()
 
     private val _state = MutableStateFlow(
         HomeState(
             widgets = initialWorkspace.widgets,
+            columns = preferencesStore.gridColumns,
             showUsageAccessPrompt = !usageRanker.hasAccess()
         )
     )
@@ -64,7 +78,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         appSource.registerCallbacks { event ->
             when (event) {
                 is PackageEvent.Added,
-                is PackageEvent.Removed -> enqueueRefresh()
+                is PackageEvent.Removed,
+                is PackageEvent.Changed -> enqueueRefresh()
             }
         }
         enqueueRefresh()
@@ -121,12 +136,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val results = if (query.isBlank()) {
                 emptyList()
             } else {
-                val searchResults = searchEngine.search(query, current.apps)
-                android.util.Log.d("HomeViewModel", "Search '$query' found ${searchResults.size} results from ${current.apps.size} total apps")
-                searchResults.take(5).forEach { app ->
-                    android.util.Log.d("HomeViewModel", "  - ${app.label}")
-                }
-                searchResults
+                searchEngine.search(query, current.apps)
             }
             current.copy(
                 searchQuery = query,
@@ -135,11 +145,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun onPageChanged(page: Int) {
+        _state.update { it.copy(currentPage = page) }
+    }
+
+    fun onPreferencesChanged() {
+        _state.update { current ->
+            val columns = preferencesStore.gridColumns
+            val favCount = preferencesStore.favoritesCount
+            val favorites = current.apps.take(favCount)
+            val pages = buildPages(current.categorizedApps, favorites)
+            current.copy(
+                columns = columns,
+                favorites = favorites,
+                activePages = pages
+            )
+        }
+    }
+
     private fun enqueueRefresh() {
         if (refreshJob?.isActive == true) return
         refreshJob = viewModelScope.launch {
             val launchables = runCatching { appSource.loadLaunchables() }.getOrElse { emptyList() }
-            android.util.Log.d("HomeViewModel", "Loaded ${launchables.size} launchable apps")
 
             val hasUsageAccess = usageRanker.hasAccess()
             val ranks = if (hasUsageAccess) usageRanker.ranks() else emptyMap()
@@ -148,14 +175,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 .mapNotNull { launchable ->
                     val icon = runCatching {
                         iconCache.get(launchable.component, launchable.userHandle)
-                    }.getOrElse { error ->
-                        android.util.Log.w("HomeViewModel", "Failed to load icon for ${launchable.label}: ${error.message}")
-                        return@mapNotNull null
-                    }
+                    }.getOrNull() ?: return@mapNotNull null
                     AppTile(
                         key = launchable.component.flattenToShortString(),
                         label = launchable.label,
                         icon = icon,
+                        packageName = launchable.component.packageName,
                         launch = {
                             runCatching {
                                 launcherApps.startMainActivity(
@@ -168,14 +193,54 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     )
                 }
-            android.util.Log.d("HomeViewModel", "Successfully loaded icons for ${tiles.size} apps")
+
+            // Categorize apps
+            val categorized = mutableMapOf<AppCategory, MutableList<AppTile>>()
+            for (tile in tiles) {
+                val appInfo = runCatching {
+                    packageManager.getApplicationInfo(tile.packageName, 0)
+                }.getOrNull()
+                val category = if (appInfo != null) {
+                    appCategorizer.categorize(tile.packageName, appInfo)
+                } else {
+                    AppCategory.OTHER
+                }
+                categorized.getOrPut(category) { mutableListOf() }.add(tile)
+            }
+
+            val favCount = preferencesStore.favoritesCount
+            val favorites = tiles.take(favCount)
+            val sortedCategorized = categorized
+                .toSortedMap(compareBy { it.order })
+                .mapValues { it.value.toList() }
+            val pages = buildPages(sortedCategorized, favorites)
 
             _state.update { current ->
                 current.copy(
                     apps = tiles,
+                    categorizedApps = sortedCategorized,
+                    favorites = favorites,
+                    activePages = pages,
+                    columns = preferencesStore.gridColumns,
                     showUsageAccessPrompt = !hasUsageAccess
                 )
             }
         }
+    }
+
+    private fun buildPages(
+        categorizedApps: Map<AppCategory, List<AppTile>>,
+        favorites: List<AppTile>
+    ): List<PageInfo> {
+        val pages = mutableListOf<PageInfo>()
+        if (favorites.isNotEmpty()) {
+            pages.add(PageInfo(title = "Favorites", isFavorites = true))
+        }
+        for ((category, apps) in categorizedApps) {
+            if (apps.isNotEmpty() && preferencesStore.isCategoryVisible(category)) {
+                pages.add(PageInfo(title = category.displayName, category = category))
+            }
+        }
+        return pages
     }
 }
