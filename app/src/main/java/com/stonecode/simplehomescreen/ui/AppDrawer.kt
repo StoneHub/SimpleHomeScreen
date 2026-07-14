@@ -4,8 +4,9 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -180,48 +181,22 @@ private fun AppListWithSections(
     onAppClick: (AppTile) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (showSections) {
-        // Group by first letter
-        val grouped = apps.groupBy { it.label.firstOrNull()?.uppercaseChar() ?: '#' }
-            .toSortedMap()
-
-        LazyColumn(
-            modifier = modifier,
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
-            grouped.forEach { (letter, appsInSection) ->
-                // Section header
-                item(key = "section_$letter") {
-                    SectionHeader(letter = letter.toString())
-                }
-
-                // Apps in section
-                items(
-                    items = appsInSection,
-                    key = { it.key }
-                ) { app ->
-                    DrawerAppItem(
-                        app = app,
-                        onClick = { onAppClick(app) }
-                    )
-                }
-            }
-        }
-    } else {
-        // Simple list without sections
-        LazyColumn(
-            modifier = modifier,
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
-            items(
-                items = apps,
-                key = { it.key }
-            ) { app ->
-                DrawerAppItem(
-                    app = app,
-                    onClick = { onAppClick(app) }
-                )
-            }
+    val orderedApps = if (showSections) apps.sortedBy { it.label.lowercase() } else apps
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(88.dp),
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        gridItems(
+            items = orderedApps,
+            key = { it.key }
+        ) { app ->
+            DrawerAppItem(
+                app = app,
+                onClick = { onAppClick(app) }
+            )
         }
     }
 }
@@ -271,27 +246,28 @@ private fun DrawerAppItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Column(
         modifier = modifier
-            .fillMaxWidth()
+            .widthIn(min = 80.dp)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Image(
             bitmap = app.icon,
             contentDescription = app.label,
             modifier = Modifier
-                .size(48.dp)
+                .size(52.dp)
                 .clip(RoundedCornerShape(12.dp))
         )
         Text(
             text = app.label,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }

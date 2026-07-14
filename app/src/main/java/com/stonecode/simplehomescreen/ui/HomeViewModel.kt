@@ -14,7 +14,12 @@ import com.stonecode.simplehomescreen.core.PackageEvent
 import com.stonecode.simplehomescreen.core.SearchEngine
 import com.stonecode.simplehomescreen.core.UsageRanker
 import com.stonecode.simplehomescreen.storage.PreferencesStore
-import com.stonecode.simplehomescreen.storage.WorkspaceSnapshot
+import com.stonecode.simplehomescreen.storage.DashboardItem
+import com.stonecode.simplehomescreen.storage.GridPosition
+import com.stonecode.simplehomescreen.storage.GridSpan
+import com.stonecode.simplehomescreen.storage.Workspace
+import com.stonecode.simplehomescreen.storage.WorkspaceLoadResult
+import com.stonecode.simplehomescreen.storage.WorkspaceSaveResult
 import com.stonecode.simplehomescreen.storage.WorkspaceStore
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +49,11 @@ data class HomeState(
     val showUsageAccessPrompt: Boolean = false,
     val drawerOpen: Boolean = false,
     val searchQuery: String = "",
-    val searchResults: List<AppTile> = emptyList()
+    val searchResults: List<AppTile> = emptyList(),
+    val loading: Boolean = true,
+    val loadError: String? = null,
+    val workspaceError: String? = null,
+    val onboardingCompleted: Boolean = false
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -59,20 +68,35 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val usageRanker = UsageRanker(application)
     private val workspaceStore = WorkspaceStore(application)
     private val searchEngine = SearchEngine()
-    private val appCategorizer = AppCategorizer()
+    private val appCategorizer = AppCategorizer(personalDevPackagePrefix = "com.stonecode")
     val preferencesStore = PreferencesStore(application)
-    private val initialWorkspace = workspaceStore.load()
+    private val initialWorkspaceResult = workspaceStore.loadWorkspace()
+    private var workspace = (initialWorkspaceResult as? WorkspaceLoadResult.Loaded)?.workspace
+        ?: Workspace()
+    private val initialWidgets = workspace.dashboardItems
+        .filterIsInstance<DashboardItem.Widget>()
+        .map { widget ->
+            WidgetTileState(
+                appWidgetId = widget.appWidgetId,
+                provider = widget.provider?.let(ComponentName::unflattenFromString)
+            )
+        }
+    private val initialWorkspaceError =
+        (initialWorkspaceResult as? WorkspaceLoadResult.RecoveryRequired)?.problem?.toString()
 
     private val _state = MutableStateFlow(
         HomeState(
-            widgets = initialWorkspace.widgets,
+            widgets = initialWidgets,
             columns = preferencesStore.gridColumns,
-            showUsageAccessPrompt = !usageRanker.hasAccess()
+            showUsageAccessPrompt = !usageRanker.hasAccess(),
+            workspaceError = initialWorkspaceError,
+            onboardingCompleted = preferencesStore.onboardingCompleted
         )
     )
     val state: StateFlow<HomeState> = _state
 
     private var refreshJob: Job? = null
+    private var refreshRequested = false
 
     init {
         appSource.registerCallbacks { event ->
@@ -108,7 +132,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             updated = newState
             newState
         }
-        updated?.let { workspaceStore.save(WorkspaceSnapshot(widgets = it.widgets)) }
+        updated?.let { persistWidgets(it.widgets) }
     }
 
     fun onWidgetRemoved(id: Int) {
@@ -119,7 +143,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             updated = newState
             newState
         }
-        updated?.let { workspaceStore.save(WorkspaceSnapshot(widgets = it.widgets)) }
+        updated?.let { persistWidgets(it.widgets) }
     }
 
     fun onDrawerToggle(open: Boolean) {
@@ -163,19 +187,74 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun completeOnboarding() {
+        preferencesStore.onboardingCompleted = true
+        _state.update { it.copy(onboardingCompleted = true) }
+    }
+
+    private fun persistWidgets(widgets: List<WidgetTileState>) {
+        val existingWidgets = workspace.dashboardItems
+            .filterIsInstance<DashboardItem.Widget>()
+            .associateBy { it.appWidgetId }
+        val persistedWidgets = widgets.mapIndexed { index, widget ->
+            existingWidgets[widget.appWidgetId] ?: DashboardItem.Widget(
+                id = "widget:${widget.appWidgetId}",
+                appWidgetId = widget.appWidgetId,
+                provider = widget.provider?.flattenToString(),
+                position = GridPosition(page = 0, column = 0, row = index * 2),
+                span = GridSpan(columns = 2, rows = 2)
+            )
+        }
+        val candidate = workspace.copy(
+            dashboardItems = workspace.dashboardItems.filterNot { it is DashboardItem.Widget } +
+                persistedWidgets
+        )
+        when (val result = workspaceStore.saveWorkspace(candidate)) {
+            WorkspaceSaveResult.Saved -> {
+                workspace = candidate
+                _state.update { it.copy(workspaceError = null) }
+            }
+            is WorkspaceSaveResult.Failed -> {
+                _state.update { it.copy(workspaceError = result.problem.toString()) }
+            }
+        }
+    }
+
     private fun enqueueRefresh() {
-        if (refreshJob?.isActive == true) return
+        if (refreshJob?.isActive == true) {
+            refreshRequested = true
+            return
+        }
         refreshJob = viewModelScope.launch {
-            val launchables = runCatching { appSource.loadLaunchables() }.getOrElse { emptyList() }
+            do {
+                refreshRequested = false
+                refreshOnce()
+            } while (refreshRequested)
+        }
+    }
+
+    private suspend fun refreshOnce() {
+            _state.update { it.copy(loading = it.apps.isEmpty(), loadError = null) }
+            val launchablesResult = runCatching { appSource.loadLaunchables() }
+            val launchables = launchablesResult.getOrElse { failure ->
+                _state.update {
+                    it.copy(
+                        loading = false,
+                        loadError = failure.message ?: "Installed apps could not be loaded"
+                    )
+                }
+                return
+            }
 
             val hasUsageAccess = usageRanker.hasAccess()
             val ranks = if (hasUsageAccess) usageRanker.ranks() else emptyMap()
             val tiles = launchables
+                .filterNot { it.component.packageName == getApplication<Application>().packageName }
                 .sortedByDescending { ranks[it.component.packageName] ?: 0.0 }
                 .map { launchable ->
                     val icon = iconCache.get(launchable.component, launchable.userHandle)
                     AppTile(
-                        key = launchable.component.flattenToShortString(),
+                        key = "${launchable.component.flattenToShortString()}@${launchable.userHandle.hashCode()}",
                         label = launchable.label,
                         icon = icon,
                         packageName = launchable.component.packageName,
@@ -220,10 +299,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     favorites = favorites,
                     activePages = pages,
                     columns = preferencesStore.gridColumns,
-                    showUsageAccessPrompt = !hasUsageAccess
+                    showUsageAccessPrompt = !hasUsageAccess,
+                    loading = false,
+                    loadError = null
                 )
             }
-        }
     }
 
     private fun buildPages(

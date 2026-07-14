@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.compose.foundation.background
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -22,11 +24,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -63,11 +66,37 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     widgetController: WidgetController,
     onRequestUsageAccess: () -> Unit,
+    onRequestHomeRole: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
+
+    BackHandler(enabled = state.drawerOpen) {
+        viewModel.onDrawerToggle(false)
+    }
+
+    if (!state.onboardingCompleted && !state.loading && state.apps.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.onboarding_title)) },
+            text = { Text(stringResource(R.string.onboarding_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.completeOnboarding()
+                    onRequestHomeRole()
+                }) {
+                    Text(stringResource(R.string.onboarding_use_launcher))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::completeOnboarding) {
+                    Text(stringResource(R.string.onboarding_preview))
+                }
+            }
+        )
+    }
 
     val pendingWidgetId = remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
     val pendingProvider = remember { mutableStateOf<ComponentName?>(null) }
@@ -88,11 +117,36 @@ fun HomeScreen(
         pendingProvider.value = null
     }
 
-    val bindLauncher = rememberLauncherForActivityResult(StartActivityForResult()) { result ->
+    val configureLauncher = rememberLauncherForActivityResult(StartActivityForResult()) { result ->
         val id = pendingWidgetId.intValue
         if (id == AppWidgetManager.INVALID_APPWIDGET_ID) return@rememberLauncherForActivityResult
         if (result.resultCode == Activity.RESULT_OK) {
             placeWidget(id)
+        } else {
+            cleanupPending()
+        }
+    }
+
+    fun configureOrPlaceWidget(id: Int) {
+        val configureComponent = widgetController.getAppWidgetInfo(id)?.configure
+        if (configureComponent == null) {
+            placeWidget(id)
+            return
+        }
+        pendingWidgetId.intValue = id
+        configureLauncher.launch(
+            Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+                component = configureComponent
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+            }
+        )
+    }
+
+    val bindLauncher = rememberLauncherForActivityResult(StartActivityForResult()) { result ->
+        val id = pendingWidgetId.intValue
+        if (id == AppWidgetManager.INVALID_APPWIDGET_ID) return@rememberLauncherForActivityResult
+        if (result.resultCode == Activity.RESULT_OK) {
+            configureOrPlaceWidget(id)
         } else {
             widgetController.deleteId(id)
         }
@@ -106,7 +160,7 @@ fun HomeScreen(
             pendingIdHolder = pendingWidgetId,
             pendingProviderHolder = pendingProvider,
             widgetController = widgetController,
-            onWidgetReady = { id -> placeWidget(id) },
+            onWidgetReady = { id -> configureOrPlaceWidget(id) },
             onBindRequired = { id, provider, options ->
                 pendingWidgetId.intValue = id
                 pendingProvider.value = provider
@@ -128,53 +182,12 @@ fun HomeScreen(
         pickLauncher.launch(pickIntent)
     }
 
-    var startY by remember { mutableStateOf(0f) }
-    var currentY by remember { mutableStateOf(0f) }
     val density = LocalDensity.current
     val drawerDragThresholdPx = with(density) { 56.dp.toPx() }
-    val notificationDragThresholdPx = with(density) { 72.dp.toPx() }
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(drawerDragThresholdPx, notificationDragThresholdPx) {
-                detectVerticalDragGestures(
-                    onDragStart = { offset ->
-                        startY = offset.y
-                        currentY = offset.y
-                    },
-                    onDragEnd = {
-                        val dragDistance = startY - currentY
-                        val startedInBottomHalf = startY > size.height * 0.5f
-                        val startedInTopThird = startY < size.height * 0.33f
-                        val dragDown = currentY - startY
-
-                        // Let the drawer open from a larger touch target so it is easier to access
-                        // on tall screens and folded devices.
-                        if (dragDistance > drawerDragThresholdPx && startedInBottomHalf) {
-                            viewModel.onDrawerToggle(true)
-                        }
-                        // Swipe down from top third → expand notification shade
-                        if (dragDown > notificationDragThresholdPx && startedInTopThird) {
-                            runCatching {
-                                @Suppress("WrongConstant")
-                                val service = context.getSystemService("statusbar")
-                                val clazz = service?.javaClass
-                                clazz?.getMethod("expandNotificationsPanel")?.invoke(service)
-                            }
-                        }
-                        startY = 0f
-                        currentY = 0f
-                    },
-                    onDragCancel = {
-                        startY = 0f
-                        currentY = 0f
-                    },
-                    onVerticalDrag = { change, _ ->
-                        currentY = change.position.y
-                    }
-                )
-            }
     ) {
         Scaffold(
             modifier = Modifier
@@ -184,12 +197,6 @@ fun HomeScreen(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    FloatingActionButton(onClick = { viewModel.onDrawerToggle(true) }) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = stringResource(R.string.drawer_all_apps)
-                        )
-                    }
                     // Settings FAB
                     FloatingActionButton(
                         onClick = {
@@ -212,6 +219,49 @@ fun HomeScreen(
                     .fillMaxSize()
                     .padding(padding)
             ) {
+                if (state.loading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                state.loadError?.let { message ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(stringResource(R.string.apps_load_failed), style = MaterialTheme.typography.titleMedium)
+                            Text(message, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+
+                state.workspaceError?.let { message ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(stringResource(R.string.workspace_recovery_required), style = MaterialTheme.typography.titleMedium)
+                            Text(message, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+
                 // Usage access prompt
                 if (state.showUsageAccessPrompt) {
                     UsageAccessCallout(
@@ -333,6 +383,29 @@ fun HomeScreen(
                 }
             }
         }
+
+        var drawerDragDistance by remember { mutableStateOf(0f) }
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(32.dp)
+                .pointerInput(drawerDragThresholdPx) {
+                    detectVerticalDragGestures(
+                        onDragStart = { drawerDragDistance = 0f },
+                        onVerticalDrag = { _, dragAmount ->
+                            if (dragAmount < 0) drawerDragDistance -= dragAmount
+                        },
+                        onDragEnd = {
+                            if (drawerDragDistance >= drawerDragThresholdPx) {
+                                viewModel.onDrawerToggle(true)
+                            }
+                            drawerDragDistance = 0f
+                        },
+                        onDragCancel = { drawerDragDistance = 0f }
+                    )
+                }
+        )
 
         // App Drawer
         AppDrawer(

@@ -21,6 +21,10 @@ class PreferencesStore(context: Context) {
         get() = prefs.getStringSet(KEY_HIDDEN_CATEGORIES, emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet(KEY_HIDDEN_CATEGORIES, value).apply()
 
+    var onboardingCompleted: Boolean
+        get() = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+        set(value) = prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, value).apply()
+
     fun isCategoryVisible(category: AppCategory): Boolean {
         return category.name !in hiddenCategories
     }
@@ -39,6 +43,7 @@ class PreferencesStore(context: Context) {
         private const val KEY_GRID_COLUMNS = "grid_columns"
         private const val KEY_FAVORITES_COUNT = "favorites_count"
         private const val KEY_HIDDEN_CATEGORIES = "hidden_categories"
+        private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
 
         const val DEFAULT_GRID_COLUMNS = 5
         const val DEFAULT_FAVORITES_COUNT = 10

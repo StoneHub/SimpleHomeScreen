@@ -5,6 +5,12 @@
     <string name="usage_access_prompt_title">Grant usage access</string>
     <string name="usage_access_prompt_message">Allow Simple Home to learn which apps you open most often.</string>
     <string name="usage_access_open_settings">Open settings</string>
+    <string name="onboarding_title">Try Simple Home first</string>
+    <string name="onboarding_message">Your dashboard stays yours. Category pages organize installed apps automatically, and usage access only changes their order. Preview the launcher before making it your default home.</string>
+    <string name="onboarding_use_launcher">Use as home</string>
+    <string name="onboarding_preview">Keep previewing</string>
+    <string name="apps_load_failed">Installed apps unavailable</string>
+    <string name="workspace_recovery_required">Dashboard data needs attention</string>
 
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
