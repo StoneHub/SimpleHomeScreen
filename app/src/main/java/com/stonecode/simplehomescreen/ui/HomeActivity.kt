@@ -38,12 +38,11 @@ class HomeActivity : ComponentActivity() {
         })
 
         enableEdgeToEdge()
-        maybeRequestHomeRole()
-
         setContent {
             HomeScreen(
                 widgetController = widgetController,
                 onRequestUsageAccess = { usageRanker.openUsageAccessSettings() },
+                onRequestHomeRole = { requestHomeRole() },
                 viewModel = viewModel
             )
         }
@@ -62,6 +61,7 @@ class HomeActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.onUsageAccessChanged()
+        viewModel.onPreferencesChanged()
     }
 
     override fun onDestroy() {
@@ -69,7 +69,7 @@ class HomeActivity : ComponentActivity() {
         widgetHost.stop()
     }
 
-    private fun maybeRequestHomeRole() {
+    private fun requestHomeRole() {
         val roleManager = getSystemService(RoleManager::class.java) ?: return
         if (roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
             !roleManager.isRoleHeld(RoleManager.ROLE_HOME)

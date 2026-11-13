@@ -2,8 +2,10 @@ package com.stonecode.simplehomescreen.core
 
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
+import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
+import android.os.Process
 import android.provider.Settings
 import kotlin.math.exp
 
@@ -13,18 +15,13 @@ class UsageRanker(private val context: Context) {
         context.getSystemService(UsageStatsManager::class.java)
 
     fun hasAccess(): Boolean {
-        val manager = usageStats ?: return false
-        val end = System.currentTimeMillis()
-        val start = end - THRESHOLD_WINDOW_MS
-        val events = manager.queryEvents(start, end)
-        val event = UsageEvents.Event()
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
-                return true
-            }
-        }
-        return false
+        if (usageStats == null) return false
+        val appOps = context.getSystemService(AppOpsManager::class.java) ?: return false
+        return appOps.checkOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS,
+            Process.myUid(),
+            context.packageName
+        ) == AppOpsManager.MODE_ALLOWED
     }
 
     fun openUsageAccessSettings() {
@@ -58,7 +55,6 @@ class UsageRanker(private val context: Context) {
 
     private companion object {
         const val DAY_MS = 24L * 60 * 60 * 1000
-        const val THRESHOLD_WINDOW_MS = 60_000L
         const val DECAY_FACTOR = 1e-4
     }
 }

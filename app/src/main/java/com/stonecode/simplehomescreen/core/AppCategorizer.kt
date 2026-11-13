@@ -152,12 +152,12 @@ class AppCategorizer(
         }
 
         // Check against professional packages
-        if (professionalPackages.any { packageName.contains(it, ignoreCase = true) }) {
+        if (professionalPackages.any { packageName.matchesPackageRule(it) }) {
             return AppCategory.PROFESSIONAL
         }
 
         // Check against utility packages
-        if (utilityPackages.any { packageName.contains(it, ignoreCase = true) }) {
+        if (utilityPackages.any { packageName.matchesPackageRule(it) }) {
             return AppCategory.UTILITIES
         }
 
@@ -174,17 +174,14 @@ class AppCategorizer(
      * Check if a package name pattern matches professional apps
      */
     fun isProfessionalPackage(packageName: String): Boolean {
-        return professionalPackages.any { packageName.contains(it, ignoreCase = true) } ||
-               packageName.contains("bank", ignoreCase = true) ||
-               packageName.contains("finance", ignoreCase = true) ||
-               packageName.contains("trading", ignoreCase = true)
+        return professionalPackages.any { packageName.matchesPackageRule(it) }
     }
 
     /**
      * Check if a package name pattern matches utility apps
      */
     fun isUtilityPackage(packageName: String): Boolean {
-        return utilityPackages.any { packageName.contains(it, ignoreCase = true) }
+        return utilityPackages.any { packageName.matchesPackageRule(it) }
     }
 
     /**
@@ -200,5 +197,11 @@ class AppCategorizer(
      */
     fun sortByUsageRank(apps: List<CategorizedAppTile>): List<CategorizedAppTile> {
         return apps.sortedByDescending { it.usageRank }
+    }
+
+    private fun String.matchesPackageRule(rule: String): Boolean {
+        val normalizedPackage = lowercase()
+        val normalizedRule = rule.lowercase().trimEnd('.')
+        return normalizedPackage == normalizedRule || normalizedPackage.startsWith("$normalizedRule.")
     }
 }
